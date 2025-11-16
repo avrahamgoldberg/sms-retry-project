@@ -19,6 +19,26 @@ A production-ready, resilient SMS retry scheduler with S3 persistence, built for
    - Single thread can acquire multiple times
    - Protects schedule queue and message map
 
+### Project Structure
+
+```
+sms-scheduler/
+├── src/
+│   ├── __init__.py
+│   ├── scheduler.py          # Core scheduler logic
+│   ├── persistence.py        # S3 operations
+│   ├── models.py             # Data models
+│   ├── config.py             # Configuration
+│   ├── main.py               # Entry point
+│   ├── api.py                # Flask web server
+│   └── templates/
+│       └── index.html        # Web UI
+├── requirements.txt          # Python dependencies
+├── Dockerfile                # Container image
+├── docker-compose.yml        # LocalStack setup
+└── README.md                 # This file
+```
+
 ### Concurrency Strategy
 
 **Thread Safety Guarantees:**
@@ -90,156 +110,25 @@ s3://bucket/
 1. Clone repository
 ```bash
 # 1. Clone repository
-git clone <repo-url>
+git clone https://github.com/avrahamgoldberg/sms-retry-project.git
 cd messageRetry
 ```
-2. Make sure your .env file contains:
-```dotenv
-ENDPOINT_URL='http://localhost:4566'
-```
-3. Install dependencies
+2. Launch with docker:
 ```bash
-pip install -r requirements.txt
+docker-compose up --build
 ```
-4. Start LocalStack
-```bash
-docker-compose up -d
-```
-5. Run application
-```bash
-python -m src.main
-```
+The project contains a DockerFile creating the app image, and a docker-compose file to build the image, as well as pull
+and build a LocalStack image to simulate S3 storage. The docker-compose file contains local envs required.
 
-
-
-### Project Structure
-
-```
-sms-scheduler/
-├── src/
-│   ├── __init__.py
-│   ├── scheduler.py          # Core scheduler logic
-│   ├── persistence.py        # S3 operations
-│   ├── models.py             # Data models
-│   ├── config.py             # Configuration
-│   ├── main.py               # Entry point
-│   └── api.py                # Flask web server
-├── templates/
-│   └── index.html            # Web UI
-├── requirements.txt          # Python dependencies
-├── Dockerfile                # Container image
-├── docker-compose.yml        # LocalStack setup
-└── README.md                 # This file
-```
 
 ---
 
 ## Deploying to EC2 with S3
 
-### Step 1: Create S3 Bucket
-
-```bash
-# Create production bucket
-aws s3 mb s3://sms-scheduler-prod --region us-east-1
-
-# Enable versioning (recommended)
-aws s3api put-bucket-versioning \
-  --bucket sms-scheduler-prod \
-  --versioning-configuration Status=Enabled
-
-# Enable encryption
-aws s3api put-bucket-encryption \
-  --bucket sms-scheduler-prod \
-  --server-side-encryption-configuration '{
-    "Rules": [{
-      "ApplyServerSideEncryptionByDefault": {
-        "SSEAlgorithm": "AES256"
-      }
-    }]
-  }'
-```
-
-### Step 2: Create IAM Role for EC2
-
-```bash
-# 1. Create trust policy
-cat > ec2-trust-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Service": "ec2.amazonaws.com"},
-    "Action": "sts:AssumeRole"
-  }]
-}
-EOF
-
-# 2. Create IAM role
-aws iam create-role \
-  --role-name sms-scheduler-ec2-role \
-  --assume-role-policy-document file://ec2-trust-policy.json
-
-# 3. Create S3 access policy
-cat > s3-access-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
-      "Resource": "arn:aws:s3:::sms-scheduler-prod"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::sms-scheduler-prod/*"
-    }
-  ]
-}
-EOF
-
-# 4. Attach policy to role
-aws iam put-role-policy \
-  --role-name sms-scheduler-ec2-role \
-  --policy-name S3Access \
-  --policy-document file://s3-access-policy.json
-
-# 5. Create instance profile
-aws iam create-instance-profile \
-  --instance-profile-name sms-scheduler-ec2-profile
-
-# 6. Add role to instance profile
-aws iam add-role-to-instance-profile \
-  --instance-profile-name sms-scheduler-ec2-profile \
-  --role-name sms-scheduler-ec2-role
-```
-
-### Step 3: Build Docker Image
-
-```bash
-# Option A: Push to Docker Hub
-docker build -t sms-scheduler:latest .
-docker tag sms-scheduler:latest yourusername/sms-scheduler:latest
-docker push yourusername/sms-scheduler:latest
-
-# Option B: Use AWS ECR (recommended)
-# Create ECR repository
-aws ecr create-repository --repository-name sms-scheduler --region us-east-1
-
-# Get account ID
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-# Login to ECR
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin \
-  ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-
-# Build and push
-docker build -t sms-scheduler:latest .
-docker tag sms-scheduler:latest \
-  ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/sms-scheduler:latest
-docker push ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/sms-scheduler:latest
-```
+### Set up resources:
+In the AWS console page create:
+ - S3 bucket
+ - IAM Role for EC2 
 
 ### Step 4: Launch EC2 Instance
 
@@ -310,26 +199,6 @@ aws ec2 run-instances \
   --iam-instance-profile Name=sms-scheduler-ec2-profile \
   --user-data file://user-data.sh \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=sms-scheduler}]'
-```
-
-### Step 5: Access Your Application
-
-```bash
-# Get instance public IP
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=sms-scheduler" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
-
-PUBLIC_IP=$(aws ec2 describe-instances \
-  --instance-ids $INSTANCE_ID \
-  --query 'Reservations[0].Instances[0].PublicIpAddress' \
-  --output text)
-
-echo "Application URL: http://$PUBLIC_IP:8080"
-
-# Test the API
-curl http://$PUBLIC_IP:8080/health
 ```
 
 ### Step 6: Manual Deployment (SSH Method)

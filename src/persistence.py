@@ -7,6 +7,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError
 from src.models import MessageState, MessageStatus
 from src.config import Config
+from dotenv import load_dotenv
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,10 @@ class S3PersistenceLayer:
             logger.info(f"S3 bucket '{self.bucket}' exists")
         except ClientError as e:
             error_code = e.response['Error']['Code']
-            if error_code == '404':
+
+            # Possible 'bucket does not exist' codes:
+            not_found_errors = {"404", "NoSuchBucket", "NotFound"}
+            if error_code in not_found_errors:
                 try:
                     self.s3_client.create_bucket(Bucket=self.bucket)
                     logger.info(f"Created S3 bucket '{self.bucket}'")

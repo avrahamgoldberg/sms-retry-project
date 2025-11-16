@@ -15,7 +15,7 @@ class Config:
     AWS_SECRET_ACCESS_KEY: str = os.getenv('AWS_SECRET_ACCESS_KEY')
 
     # S3 Configuration
-    S3_BUCKET: str = os.getenv('S3_BUCKET', 'sms-retry-scheduler')
+    S3_BUCKET: str = os.getenv('S3_BUCKET')
     S3_STATE_PREFIX: str = os.getenv('S3_STATE_PREFIX', 'state')
     S3_SUCCESS_PREFIX: str = os.getenv('S3_SUCCESS_PREFIX', 'success')
     S3_FAILED_PREFIX: str = os.getenv('S3_FAILED_PREFIX', 'failed')

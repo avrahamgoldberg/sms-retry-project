@@ -7,3 +7,19 @@ services:
       - DEBUG=0
     ports:
       - "4566:4566"
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - LOG_LEVEL=info
+      - ENDPOINT_URL=http://localstack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - S3_BUCKET=sms-retry-scheduler
+      - S3_STATE_PREFIX=state
+      - S3_SUCCESS_PREFIX=success
+      - S3_FAILED_PREFIX=failed
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
