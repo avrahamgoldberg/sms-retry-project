@@ -49,7 +49,7 @@ pip install -r requirements.txt
 # 2d. Load environment variables
 if [ -f ".env" ]; then
     echo "Loading environment variables from .env..."
-    export \$(grep -v '^#' .env | xargs)
+    export $(grep -v '^#' .env | tr -d '\r' | xargs)
 fi
 
 # 2e. Restart app (example with gunicorn)
