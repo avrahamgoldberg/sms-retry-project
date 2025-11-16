@@ -1,4 +1,3 @@
-from src.main import main
 from src.api import SchedulerAPI
 from src.config import Config
 from src.scheduler import SMSScheduler
